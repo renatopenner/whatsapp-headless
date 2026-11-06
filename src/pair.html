@@ -10,7 +10,7 @@
     --muted: #8696a0; --green: #00a884; --red: #f15c6d; --amber: #ffbc38;
   }
   @media (prefers-color-scheme: light) {
-    :root { --bg: #f0f2f5; --card: #fff; --line: #e2e6e9; --fg: #111b21; --muted: #667781; }
+    :root { --bg: #f0f2f5; --card: #fff; --line: #e3e7ea; --fg: #111b21; --muted: #667781; }
   }
   * { box-sizing: border-box; }
   body {
@@ -29,19 +29,43 @@
   }
   .pill.ok { background: rgba(0,168,132,.14); color: var(--green); border-color: rgba(0,168,132,.4); }
   .pill.err { background: rgba(241,92,109,.14); color: var(--red); border-color: rgba(241,92,109,.4); }
+  .pill.load { background: rgba(0,168,132,.10); color: var(--green); border-color: rgba(0,168,132,.35); }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.load .dot { animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: .25; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.15); } }
+
   .qrbox { display: grid; place-items: center; padding: 14px; background: #fff; border-radius: 12px; }
   .qrbox img { width: 100%; max-width: 300px; display: block; image-rendering: pixelated; }
-  .qrbox.hidden { display: none; }
-  .ok-state { display: none; text-align: center; padding: 26px 6px; }
-  .ok-state.show { display: block; }
-  .ok-icon { font-size: 44px; line-height: 1; margin-bottom: 12px; }
-  .jid { font-family: ui-monospace, Consolas, monospace; font-size: 13px; color: var(--muted); margin-top: 6px; word-break: break-all; }
   ol { margin: 16px 0 0; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.65; }
   ol b { color: var(--fg); font-weight: 600; }
   .meter { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 16px; }
   .meter > i { display: block; height: 100%; width: 0; background: var(--green); transition: width .25s linear; }
+
+  /* loading: shown the moment the phone accepts the code */
+  .load-view { display: none; text-align: center; padding: 34px 6px 30px; }
+  .load-view.show { display: block; }
+  .spinner {
+    width: 46px; height: 46px; margin: 0 auto 18px; border-radius: 50%;
+    border: 3px solid var(--line); border-top-color: var(--green); animation: spin .9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .load-title { font-weight: 650; font-size: 15px; }
+  .load-sub { color: var(--muted); font-size: 12.5px; margin-top: 6px; line-height: 1.5; }
+  .bars { display: flex; gap: 5px; justify-content: center; margin-top: 20px; }
+  .bars i { width: 26px; height: 3px; border-radius: 2px; background: var(--line); animation: wave 1.2s ease-in-out infinite; }
+  .bars i:nth-child(2) { animation-delay: .15s; } .bars i:nth-child(3) { animation-delay: .3s; } .bars i:nth-child(4) { animation-delay: .45s; }
+  @keyframes wave { 0%,100% { background: var(--line); } 50% { background: var(--green); } }
+
+  .ok-view { display: none; text-align: center; padding: 30px 6px 26px; }
+  .ok-view.show { display: block; }
+  .ok-icon {
+    width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 50%; display: grid; place-items: center;
+    background: rgba(0,168,132,.15); color: var(--green); font-size: 28px; animation: pop .35s ease-out;
+  }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .jid { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; color: var(--muted); margin-top: 6px; word-break: break-all; }
   .foot { margin-top: 14px; font-size: 11.5px; color: var(--muted); text-align: center; }
+
   details { margin-top: 16px; border-top: 1px dashed var(--line); padding-top: 12px; }
   summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; }
   label { display: block; font-size: 11.5px; color: var(--muted); margin: 10px 0 4px; }
@@ -65,20 +89,28 @@
     <div class="pill" id="pill"><span class="dot"></span><span id="pillText">verificando…</span></div>
 
     <div id="pairView">
-      <div class="qrbox" id="qrbox"><img id="qr" alt="QR de pareamento"></div>
+      <div class="qrbox"><img id="qr" alt="QR de pareamento"></div>
       <div class="meter"><i id="meter"></i></div>
       <ol>
         <li>Abra o <b>WhatsApp</b> no celular</li>
         <li><b>Configurações → Dispositivos conectados</b></li>
         <li><b>Conectar dispositivo</b> e aponte para o código</li>
       </ol>
-      <div class="foot" id="foot">O código se renova sozinho a cada ~20 s.</div>
+      <div class="foot">O código se renova sozinho a cada ~20 s. A página detecta o pareamento na hora.</div>
     </div>
 
-    <div class="ok-state" id="okView">
-      <div class="ok-icon">✅</div>
+    <div class="load-view" id="loadView">
+      <div class="spinner"></div>
+      <div class="load-title" id="loadTitle">Carregando…</div>
+      <div class="load-sub" id="loadSub">Sincronizando a sessão com o WhatsApp. Não feche esta página.</div>
+      <div class="bars"><i></i><i></i><i></i><i></i></div>
+    </div>
+
+    <div class="ok-view" id="okView">
+      <div class="ok-icon">✓</div>
       <div style="font-weight:650">Dispositivo pareado</div>
       <div class="jid" id="jid"></div>
+      <div class="load-sub" style="margin-top:10px">Pode fechar esta página — o envio continua funcionando em segundo plano.</div>
     </div>
 
     <details>
@@ -96,86 +128,128 @@
 </div>
 
 <script>
-  const qr = document.getElementById('qr');
-  const qrbox = document.getElementById('qrbox');
-  const pill = document.getElementById('pill');
-  const pillText = document.getElementById('pillText');
-  const okView = document.getElementById('okView');
-  const pairView = document.getElementById('pairView');
-  const meter = document.getElementById('meter');
-  const jidEl = document.getElementById('jid');
+  const el = (id) => document.getElementById(id);
+  const qr = el('qr'), pill = el('pill'), pillText = el('pillText');
+  const pairView = el('pairView'), loadView = el('loadView'), okView = el('okView');
+  const meter = el('meter'), jidEl = el('jid'), loadTitle = el('loadTitle'), loadSub = el('loadSub');
 
-  const CYCLE = 20000;      // Baileys rotates the QR roughly every 20s
-  const TICK = 250;
-
-  let paired = false;
-  let lastRefresh = 0;
-  let connected = false;
+  const CYCLE = 20000;   // Baileys rotates the pairing code about every 20s
+  let state = 'starting';   // starting | pairing | loading | ready | error
+  let lastQR = 0;
+  let lastEvent = 0;
 
   function setPill(kind, text) {
-    pill.className = 'pill' + (kind === 'ok' ? ' ok' : kind === 'err' ? ' err' : '');
+    pill.className = 'pill' + (kind ? ' ' + kind : '');
     pillText.textContent = text;
   }
 
+  function view(name) {
+    pairView.style.display = name === 'pairing' ? '' : 'none';
+    loadView.classList.toggle('show', name === 'loading');
+    okView.classList.toggle('show', name === 'ready');
+  }
+
   function refreshQR() {
-    lastRefresh = Date.now();
-    qr.src = '/qr.png?t=' + lastRefresh;   // cache-buster: always the live code
+    lastQR = Date.now();
+    qr.src = '/qr.png?t=' + lastQR;    // cache-buster: always the current code
+  }
+
+  /**
+   * Single place that decides what to show. The server pushes `loading: true`
+   * the moment the phone accepts the code (before the session is fully open),
+   * so we can say "Carregando…" instead of waiting for the next poll.
+   */
+  function apply(s) {
+    const was = state;
+
+    if (s.connected) {
+      state = 'ready';
+      view('ready');
+      jidEl.textContent = s.jid || '';
+      setPill('ok', 'pareado e conectado');
+      return;
+    }
+
+    if (s.loading) {
+      state = 'loading';
+      view('loading');
+      setPill('load', 'pareamento aceito');
+      loadTitle.textContent = 'Carregando…';
+      loadSub.textContent = 'Sincronizando a sessão com o WhatsApp. Não feche esta página.';
+      return;
+    }
+
+    if (s.phase === 'pairing' || s.needs_pairing) {
+      state = 'pairing';
+      view('pairing');
+      setPill('', 'aguardando leitura do QR');
+      if (was !== 'pairing' || !qr.getAttribute('src') || Date.now() - lastQR > CYCLE) refreshQR();
+      return;
+    }
+
+    if (s.phase === 'error' || s.last_error) {
+      state = 'error';
+      view('loading');
+      setPill('err', 'erro');
+      loadTitle.textContent = 'Falhou';
+      loadSub.textContent = s.last_error || 'veja o log do servidor';
+      return;
+    }
+
+    // starting / connecting without a scan (already paired, reconnecting…)
+    state = 'loading';
+    view('loading');
+    setPill('load', s.paired ? 'reconectando' : 'conectando');
+    loadTitle.textContent = 'Carregando…';
+    loadSub.textContent = s.paired ? 'Retomando a sessão salva…' : 'Abrindo conexão com o WhatsApp…';
+  }
+
+  // ---- live feed (instant) with polling as fallback ----
+  function wireEvents() {
+    if (!window.EventSource) return null;
+    const es = new EventSource('/events');
+    es.addEventListener('state', (e) => {
+      lastEvent = Date.now();
+      try { apply(JSON.parse(e.data)); } catch {}
+    });
+    es.onerror = () => { /* EventSource retries on its own */ };
+    return es;
   }
 
   async function poll() {
+    // only when the live feed is silent (older browser, proxy, token-protected API)
+    if (Date.now() - lastEvent < 8000) return;
     try {
       const r = await fetch('/health', { cache: 'no-store' });
-      const h = await r.json();
-      paired = !!h.paired && !!h.connected;
-      connected = !!h.connected;
-
-      if (paired) {
-        setPill('ok', 'pareado e conectado');
-        pairView.style.display = 'none';
-        okView.classList.add('show');
-        jidEl.textContent = h.jid || '';
-        return;
-      }
-
-      pairView.style.display = '';
-      okayOff();
-
-      if (h.needs_pairing) {
-        setPill('', 'aguardando leitura do QR');
-        if (!qr.src || Date.now() - lastRefresh > CYCLE) refreshQR();
-      } else if (h.last_error) {
-        setPill('err', 'erro: ' + h.last_error);
-      } else {
-        setPill('', 'conectando…');
-      }
+      if (!r.ok) throw new Error('http ' + r.status);
+      lastEvent = Date.now();
+      apply(await r.json());
     } catch (e) {
       setPill('err', 'servidor fora do ar');
     }
   }
 
-  function okayOff() { okView.classList.remove('show'); }
-
-  // progress bar between renewals, purely visual
+  // keep a fresh code on screen while pairing
+  setInterval(() => { if (state === 'pairing') refreshQR(); }, CYCLE);
   setInterval(() => {
-    if (paired || !qr.getAttribute('src')) return;
-    const p = Math.min(100, ((Date.now() - lastRefresh) / CYCLE) * 100);
-    meter.style.width = p + '%';
-  }, TICK);
+    if (state !== 'pairing') return;
+    meter.style.width = Math.min(100, ((Date.now() - lastQR) / CYCLE) * 100) + '%';
+  }, 250);
 
-  // renew on our own too, so a stale code never stays on screen
-  setInterval(() => { if (!paired) refreshQR(); }, CYCLE);
+  qr.addEventListener('error', () => {
+    if (state !== 'pairing') return;   // 409 after pairing = expected, stop retrying
+    setPill('err', 'QR indisponível — renovando');
+    setTimeout(() => { if (state === 'pairing') refreshQR(); }, 1200);
+  });
 
-  qr.addEventListener('error', () => { setPill('err', 'QR indisponível — renovando'); setTimeout(refreshQR, 1500); });
-
-  document.getElementById('sendBtn').addEventListener('click', async (e) => {
-    const out = document.getElementById('out');
-    const btn = e.currentTarget;
+  el('sendBtn').addEventListener('click', async (e) => {
+    const out = el('out'), btn = e.currentTarget;
     btn.disabled = true; out.textContent = 'enviando…';
     try {
       const body = {
-        to: document.getElementById('to').value.trim() || 'me',
-        text: document.getElementById('text').value.trim() || undefined,
-        file: document.getElementById('file').value.trim() || undefined,
+        to: el('to').value.trim() || 'me',
+        text: el('text').value.trim() || undefined,
+        file: el('file').value.trim() || undefined,
       };
       const r = await fetch('/send', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       out.textContent = JSON.stringify(await r.json(), null, 2);
@@ -184,9 +258,9 @@
     } finally { btn.disabled = false; }
   });
 
+  wireEvents();
   poll();
   setInterval(poll, 2500);
-  refreshQR();
 </script>
 </body>
 </html>

@@ -6,3 +6,6 @@ pair-qr.png
 .env
 npm-debug.log*
 .DS_Store
+*.log
+server.log
+teste-envio.*

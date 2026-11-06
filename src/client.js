@@ -31,8 +31,11 @@ function authDir() {
 }
 
 function isPaired() {
+  // A companion (linked) device never sets creds.registered — only creds.me is
+  // filled in, and only after the phone approves the link.
   try {
-    return fs.existsSync(path.join(AUTH_DIR, 'creds.json'));
+    const creds = JSON.parse(fs.readFileSync(path.join(AUTH_DIR, 'creds.json'), 'utf8'));
+    return !!(creds && creds.me && creds.me.id);
   } catch {
     return false;
   }
@@ -68,9 +71,15 @@ function detectKind(mimetype) {
 
 /**
  * Connect and keep reconnecting. Resolves once the socket is open.
- * onQR(text) is called with the raw pairing string whenever pairing is needed.
+ *
+ * onQR(text)     – raw pairing string, called again every time the QR rotates
+ * onUpdate(info) – live state, so a UI can react the instant the phone scans:
+ *                  phase 'pairing'    -> waiting for the scan
+ *                  phase 'connecting' -> scan accepted, session syncing (show "loading")
+ *                  phase 'open'       -> ready to send, carries the jid
+ *                  phase 'close'      -> dropped, will reconnect
  */
-async function connect({ onQR, reconnect = true } = {}) {
+async function connect({ onQR, onUpdate, reconnect = true } = {}) {
   const { state, saveCreds } = await useMultiFileAuthState(authDir());
   const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
 
@@ -84,37 +93,65 @@ async function connect({ onQR, reconnect = true } = {}) {
     browser: baileys.Browsers && baileys.Browsers.macOS ? baileys.Browsers.macOS('Desktop') : undefined,
   });
 
-  const session = { sock, jid: null, qr: null, closed: false, open: false };
+  const session = { sock, jid: null, qr: null, closed: false, open: false, phase: 'connecting', scanned: false };
+
+  const emit = (extra) => {
+    if (typeof onUpdate !== 'function') return;
+    try {
+      onUpdate(Object.assign({ phase: session.phase, jid: session.jid, scanned: session.scanned, session }, extra || {}));
+    } catch { /* listener's problem */ }
+  };
 
   const opened = new Promise((resolve, reject) => {
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (u) => {
       const { connection, lastDisconnect, qr } = u;
+
       if (qr) {
         session.qr = qr;
+        session.phase = 'pairing';
         if (onQR) {
           try { onQR(qr); } catch { /* caller's problem */ }
         }
+        emit();
       }
+
+      // Scan accepted: Baileys stops emitting QRs and goes to 'connecting'
+      // while the session is synced. This is the moment a UI shows "loading".
+      if (connection === 'connecting') {
+        if (session.qr) {
+          session.qr = null;
+          session.scanned = true;
+        }
+        session.phase = 'connecting';
+        emit();
+      }
+
       if (connection === 'open') {
         session.open = true;
         session.qr = null;
         session.jid = jidNormalizedUser(sock.user.id);
+        session.phase = 'open';
+        emit();
         resolve(session);
+        return;
       }
+
       if (connection === 'close') {
         session.open = false;
         session.closed = true;
+        session.phase = 'close';
         const code = lastDisconnect && lastDisconnect.error && lastDisconnect.error.output
           ? lastDisconnect.error.output.statusCode
           : undefined;
+        emit({ code });
         if (code === DisconnectReason.loggedOut) {
           reject(new Error('device logged out: delete the auth folder and pair again'));
           return;
         }
         if (!reconnect) { reject(new Error(`connection closed (code ${code})`)); return; }
-        setTimeout(() => connect({ onQR, reconnect }).catch(() => {}), 2000);
+        setTimeout(() => connect({ onQR, onUpdate, reconnect }).catch(() => {}), 2000);
       }
     });
   });

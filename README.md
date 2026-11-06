@@ -84,9 +84,23 @@ curl -s -X POST localhost:8787/send \
 | Method | Path | Body / notes |
 | --- | --- | --- |
 | GET | `/` , `/pair` | pairing page with self-renewing QR |
+| GET | `/events` | Server-Sent Events stream: state pushed the instant it changes |
 | GET | `/health` | pairing, connection, jid |
 | GET | `/qr` , `/qr.png` | PNG of the pairing QR (`?format=text` for the raw string) |
+| GET | `/status/<id>` | delivery receipt of a message id returned by `/send` |
 | POST | `/send` | `{ "to", "text", "file", "caption", "filename", "asDocument" }` |
+
+### Pairing detection
+
+The page never guesses: `/events` pushes `phase` transitions.
+
+| `phase` | meaning | page shows |
+| --- | --- | --- |
+| `pairing` | waiting for the scan, a fresh QR is on screen | QR + instructions |
+| `connecting` with `scanned: true` | phone approved the code, session syncing | **"Carregando…"** |
+| `open` | ready, `jid` filled in | paired ✓ |
+
+Because it is a push stream, the switch to "loading" happens in the same instant the phone confirms — no polling interval to wait for. If `EventSource` is unavailable the page falls back to `/health` polling on its own.
 
 The server binds `127.0.0.1` by default (`WA_HOST`, `WA_PORT`) and reconnects on its own.
 
