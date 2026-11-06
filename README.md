@@ -77,7 +77,7 @@ curl -s localhost:8787/qr -o qr.png                     # only while unpaired
 
 curl -s -X POST localhost:8787/send \
   -H 'content-type: application/json' \
-  -H 'x-api-key: optional-secret' \
+  -H "x-api-key: $WA_TOKEN" \
   -d '{"to":"me","file":"C:/path/report.pdf","caption":"done"}'
 ```
 
@@ -88,6 +88,10 @@ curl -s -X POST localhost:8787/send \
 | GET | `/health` | pairing, connection, jid |
 | GET | `/qr` , `/qr.png` | PNG of the pairing QR (`?format=text` for the raw string) |
 | GET | `/status/<id>` | delivery receipt of a message id returned by `/send` |
+| GET | `/status` | status panel: service, WhatsApp, browser sessions, API keys |
+| GET | `/api/service` | pid, uptime, version, auth dir, last sends |
+| GET | `/api/keys/status` | platforms with an active login (`?refresh=1` bypasses the 2 min cache) |
+| GET/POST | `/api/keys/scan` | `POST` starts a key scan, `GET` polls it (masked values only) |
 | POST | `/send` | `{ "to", "text", "file", "caption", "filename", "asDocument" }` |
 
 ### Pairing detection
@@ -103,6 +107,39 @@ The page never guesses: `/events` pushes `phase` transitions.
 Because it is a push stream, the switch to "loading" happens in the same instant the phone confirms — no polling interval to wait for. If `EventSource` is unavailable the page falls back to `/health` polling on its own.
 
 The server binds `127.0.0.1` by default (`WA_HOST`, `WA_PORT`) and reconnects on its own.
+
+## Status panel and desktop shortcut
+
+`/status` keeps everything an operator needs on a single page: WhatsApp pairing state (live over
+`/events`, with the QR inline while it is not paired), service pid / uptime / version, the last
+sends with their delivery receipt, the platforms that still hold a logged-in session, and the API
+keys found inside that session — always masked.
+
+```powershell
+# Windows: puts "Status do WhatsApp" on the Desktop
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop\install-shortcut.ps1
+```
+
+The shortcut runs `desktop/status.vbs`, which
+
+1. checks whether `127.0.0.1:8787` already answers,
+2. if not, starts `node src/server.js` **without any window** and waits up to 30 s for it,
+3. opens the panel in the default browser.
+
+One double click is enough to bring the service back after a reboot. The hidden start logs to
+`%LOCALAPPDATA%\whatsapp-headless.log`. Uninstall = delete the shortcut (and the project folder).
+
+The right-hand side of the panel is optional and reads from a separate local tool of your own,
+configured in `config.local.json` (git-ignored):
+
+```json
+{ "csDir": "C:/path/to/your-session-tool" }
+```
+
+That folder must be a Python project exposing `status` and `scan` subcommands that print JSON
+(module defaults to `chromesession.cli`; override with `CS_DIR`, `CS_PYTHON` or `csModule`).
+Without it the card says "não configurado" and the rest keeps working. A scan takes ~2 minutes, so
+it runs on demand, in the background, with the page polling for the result.
 
 ## MCP server (Antigravity, Claude Desktop, Cursor, ...)
 
@@ -129,6 +166,9 @@ Tools exposed: `wa_status`, `wa_send_text`, `wa_send_file`, `wa_pair`.
 - `src/client.js` — socket, auth state, jid resolution, media kind detection by MIME.
 - `src/cli.js` — terminal surface.
 - `src/server.js` — HTTP surface, single long-lived socket, auto-reconnect.
+- `src/status.html` — status panel (service, WhatsApp, sessions, keys).
+- `src/keys.js` — optional bridge to an external session/key tool; masks every secret.
+- `desktop/status.vbs` + `desktop/install-shortcut.ps1` — desktop shortcut and hidden cold start.
 - `src/mcp.js` — MCP stdio JSON-RPC 2.0 (no SDK dependency).
 
 `to` accepts `me`/`self`, any phone format (`+55 11 9...`, `5511...`), or a full jid (`...@s.whatsapp.net`, `...@g.us`).

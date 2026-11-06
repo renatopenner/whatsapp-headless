@@ -8,6 +8,7 @@
     "status": "node src/cli.js status",
     "send": "node src/cli.js send",
     "serve": "node src/server.js",
+    "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File desktop/install-shortcut.ps1",
     "mcp": "node src/mcp.js"
   },
   "keywords": [

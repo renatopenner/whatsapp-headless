@@ -23,13 +23,17 @@ const fs = require('fs');
 const path = require('path');
 const QRCode = require('qrcode');
 const { connect, isPaired, sendText, sendFile, authDir } = require('./client');
+const keys = require('./keys');
+
+const VERSION = require('../package.json').version;
+const STARTED = Date.now();
 
 const PORT = Number(process.env.WA_PORT || 8787);
 const HOST = process.env.WA_HOST || '127.0.0.1';
 const TOKEN = process.env.WA_TOKEN || '';
 
 // phase: starting -> pairing (QR on screen) -> connecting (scan accepted, syncing) -> open
-const state = { session: null, qr: null, lastError: null, phase: 'starting', scanned: false };
+const state = { session: null, qr: null, lastError: null, phase: 'starting', scanned: false, sent: [] };
 
 /** Clients connected to /events; every change is pushed to them immediately. */
 const subscribers = new Set();
@@ -92,6 +96,16 @@ function snapshot() {
     last_error: state.lastError,
     ts: Date.now(),
   };
+}
+
+function humanUp(ms) {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}min ${s % 60}s`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${m % 60}min`;
+  return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
 function broadcast() {
@@ -168,6 +182,13 @@ const server = http.createServer(async (req, res) => {
       return res.end(html);
     }
 
+    // Status panel: service, WhatsApp, browser sessions and API keys in one place.
+    if (req.method === 'GET' && pathname === '/status') {
+      const page = fs.readFileSync(path.join(__dirname, 'status.html'));
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': page.length, 'cache-control': 'no-store' });
+      return res.end(page);
+    }
+
     // Live feed: the page knows the instant the phone scans, without polling lag.
     if (req.method === 'GET' && pathname === '/events') {
       res.writeHead(200, {
@@ -212,19 +233,56 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, id, status: acks.get(id) || 'unknown' });
     }
 
+    if (req.method === 'GET' && pathname === '/api/service') {
+      const upMs = Date.now() - STARTED;
+      return json(res, 200, {
+        ok: true,
+        address: `http://${HOST}:${PORT}`,
+        pid: process.pid,
+        version: VERSION,
+        started_at: STARTED,
+        uptime_ms: upMs,
+        uptime_human: humanUp(upMs),
+        auth_dir: authDir(),
+        whatsapp: snapshot(),
+        sent: state.sent.slice(-8).map((s) => ({ ...s, status: acks.get(s.id) || 'pending' })),
+      });
+    }
+
+    if (req.method === 'GET' && pathname === '/api/keys/status') {
+      if (!keys.config().ready) {
+        return json(res, 200, { ok: true, ready: false, error: 'não configurado: config.local.json com {"csDir": "..."}' });
+      }
+      const st = await keys.getStatus({ force: query.refresh === '1' });
+      return json(res, 200, { ok: true, ready: true, running: st.running, ranAt: st.ranAt, error: st.error, platforms: st.data || [] });
+    }
+
+    if ((req.method === 'GET' || req.method === 'POST') && pathname === '/api/keys/scan') {
+      if (!keys.config().ready) {
+        return json(res, 200, { ok: true, ready: false, error: 'não configurado: config.local.json com {"csDir": "..."}' });
+      }
+      const st = req.method === 'POST' ? keys.startScan() : keys.scanState();
+      return json(res, 200, Object.assign({ ok: true, ready: true }, st));
+    }
+
     if (req.method === 'POST' && pathname === '/send') {
       const body = await readBody(req);
       if (!state.session || !state.session.open) return json(res, 503, { ok: false, error: 'not connected' });
       const to = body.to || 'me';
       const sent = [];
+      const remember = (r, kind) => {
+        sent.push(r);
+        state.sent.push({ at: Date.now(), id: r.id, to: r.to, kind });
+        if (state.sent.length > 50) state.sent.splice(0, state.sent.length - 50);
+      };
       if (body.file) {
         const abs = path.isAbsolute(body.file) ? body.file : path.resolve(process.cwd(), body.file);
         if (!fs.existsSync(abs)) return json(res, 400, { ok: false, error: `file not found: ${abs}` });
-        sent.push(await sendFile(state.session.sock, to, abs, {
+        remember(await sendFile(state.session.sock, to, abs, {
           caption: body.caption, filename: body.filename, asDocument: !!body.asDocument,
-        }));
+        }), 'arquivo');
       }
-      if (body.text) sent.push(await sendText(state.session.sock, to, body.text));
+      if (body.text) remember(await sendText(state.session.sock, to, body.text), 'texto');
       if (!sent.length) return json(res, 400, { ok: false, error: 'nothing to send' });
       return json(res, 200, { ok: true, sent });
     }

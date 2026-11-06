@@ -9,3 +9,4 @@ npm-debug.log*
 *.log
 server.log
 teste-envio.*
+config.local.json
