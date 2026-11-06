@@ -72,6 +72,13 @@ const server = http.createServer(async (req, res) => {
   if (!authed(req)) return json(res, 401, { ok: false, error: 'unauthorized' });
 
   try {
+    // Pairing page: shows the QR, renews it automatically, and confirms pairing.
+    if (req.method === 'GET' && (pathname === '/' || pathname === '/pair')) {
+      const html = fs.readFileSync(path.join(__dirname, 'pair.html'));
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': html.length, 'cache-control': 'no-store' });
+      return res.end(html);
+    }
+
     if (req.method === 'GET' && pathname === '/health') {
       return json(res, 200, {
         ok: true,
@@ -84,7 +91,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    if (req.method === 'GET' && pathname === '/qr') {
+    if (req.method === 'GET' && (pathname === '/qr' || pathname === '/qr.png')) {
       if (!state.qr) return json(res, 409, { ok: false, error: 'no pairing in progress (already paired?)' });
       if (query.format === 'text') return json(res, 200, { ok: true, qr: state.qr });
       const png = await QRCode.toBuffer(state.qr, { width: 512, margin: 2 });

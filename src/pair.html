@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsApp headless — pareamento</title>
+<style>
+  :root {
+    --bg: #0b141a; --card: #111b21; --line: #22333b; --fg: #e9edef;
+    --muted: #8696a0; --green: #00a884; --red: #f15c6d; --amber: #ffbc38;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f0f2f5; --card: #fff; --line: #e2e6e9; --fg: #111b21; --muted: #667781; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: var(--bg); color: var(--fg); padding: 24px;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { width: 100%; max-width: 430px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
+  h1 { font-size: 19px; margin: 0 0 4px; font-weight: 650; letter-spacing: -.2px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600;
+    padding: 5px 11px; border-radius: 99px; background: rgba(255,188,56,.14); color: var(--amber);
+    border: 1px solid rgba(255,188,56,.35); margin-bottom: 18px;
+  }
+  .pill.ok { background: rgba(0,168,132,.14); color: var(--green); border-color: rgba(0,168,132,.4); }
+  .pill.err { background: rgba(241,92,109,.14); color: var(--red); border-color: rgba(241,92,109,.4); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .qrbox { display: grid; place-items: center; padding: 14px; background: #fff; border-radius: 12px; }
+  .qrbox img { width: 100%; max-width: 300px; display: block; image-rendering: pixelated; }
+  .qrbox.hidden { display: none; }
+  .ok-state { display: none; text-align: center; padding: 26px 6px; }
+  .ok-state.show { display: block; }
+  .ok-icon { font-size: 44px; line-height: 1; margin-bottom: 12px; }
+  .jid { font-family: ui-monospace, Consolas, monospace; font-size: 13px; color: var(--muted); margin-top: 6px; word-break: break-all; }
+  ol { margin: 16px 0 0; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+  ol b { color: var(--fg); font-weight: 600; }
+  .meter { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 16px; }
+  .meter > i { display: block; height: 100%; width: 0; background: var(--green); transition: width .25s linear; }
+  .foot { margin-top: 14px; font-size: 11.5px; color: var(--muted); text-align: center; }
+  details { margin-top: 16px; border-top: 1px dashed var(--line); padding-top: 12px; }
+  summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; }
+  label { display: block; font-size: 11.5px; color: var(--muted); margin: 10px 0 4px; }
+  input, textarea {
+    width: 100%; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--line);
+    background: transparent; color: var(--fg); font: inherit; font-size: 13px;
+  }
+  button {
+    margin-top: 12px; width: 100%; padding: 10px; border: 0; border-radius: 9px;
+    background: var(--green); color: #fff; font: inherit; font-weight: 650; font-size: 13.5px; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  pre { margin: 10px 0 0; font-size: 11.5px; color: var(--muted); white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>WhatsApp headless</h1>
+    <div class="sub">Pareie uma vez — depois os envios acontecem sem nenhuma janela.</div>
+    <div class="pill" id="pill"><span class="dot"></span><span id="pillText">verificando…</span></div>
+
+    <div id="pairView">
+      <div class="qrbox" id="qrbox"><img id="qr" alt="QR de pareamento"></div>
+      <div class="meter"><i id="meter"></i></div>
+      <ol>
+        <li>Abra o <b>WhatsApp</b> no celular</li>
+        <li><b>Configurações → Dispositivos conectados</b></li>
+        <li><b>Conectar dispositivo</b> e aponte para o código</li>
+      </ol>
+      <div class="foot" id="foot">O código se renova sozinho a cada ~20 s.</div>
+    </div>
+
+    <div class="ok-state" id="okView">
+      <div class="ok-icon">✅</div>
+      <div style="font-weight:650">Dispositivo pareado</div>
+      <div class="jid" id="jid"></div>
+    </div>
+
+    <details>
+      <summary>Testar envio</summary>
+      <label for="to">Para</label>
+      <input id="to" value="me" placeholder="me, +55 11 9..., grupo@g.us">
+      <label for="file">Arquivo (caminho completo, opcional)</label>
+      <input id="file" placeholder="C:/caminho/arquivo.pdf">
+      <label for="text">Texto / legenda</label>
+      <textarea id="text" rows="2" placeholder="teste de envio em background"></textarea>
+      <button id="sendBtn">Enviar</button>
+      <pre id="out"></pre>
+    </details>
+  </div>
+</div>
+
+<script>
+  const qr = document.getElementById('qr');
+  const qrbox = document.getElementById('qrbox');
+  const pill = document.getElementById('pill');
+  const pillText = document.getElementById('pillText');
+  const okView = document.getElementById('okView');
+  const pairView = document.getElementById('pairView');
+  const meter = document.getElementById('meter');
+  const jidEl = document.getElementById('jid');
+
+  const CYCLE = 20000;      // Baileys rotates the QR roughly every 20s
+  const TICK = 250;
+
+  let paired = false;
+  let lastRefresh = 0;
+  let connected = false;
+
+  function setPill(kind, text) {
+    pill.className = 'pill' + (kind === 'ok' ? ' ok' : kind === 'err' ? ' err' : '');
+    pillText.textContent = text;
+  }
+
+  function refreshQR() {
+    lastRefresh = Date.now();
+    qr.src = '/qr.png?t=' + lastRefresh;   // cache-buster: always the live code
+  }
+
+  async function poll() {
+    try {
+      const r = await fetch('/health', { cache: 'no-store' });
+      const h = await r.json();
+      paired = !!h.paired && !!h.connected;
+      connected = !!h.connected;
+
+      if (paired) {
+        setPill('ok', 'pareado e conectado');
+        pairView.style.display = 'none';
+        okView.classList.add('show');
+        jidEl.textContent = h.jid || '';
+        return;
+      }
+
+      pairView.style.display = '';
+      okayOff();
+
+      if (h.needs_pairing) {
+        setPill('', 'aguardando leitura do QR');
+        if (!qr.src || Date.now() - lastRefresh > CYCLE) refreshQR();
+      } else if (h.last_error) {
+        setPill('err', 'erro: ' + h.last_error);
+      } else {
+        setPill('', 'conectando…');
+      }
+    } catch (e) {
+      setPill('err', 'servidor fora do ar');
+    }
+  }
+
+  function okayOff() { okView.classList.remove('show'); }
+
+  // progress bar between renewals, purely visual
+  setInterval(() => {
+    if (paired || !qr.getAttribute('src')) return;
+    const p = Math.min(100, ((Date.now() - lastRefresh) / CYCLE) * 100);
+    meter.style.width = p + '%';
+  }, TICK);
+
+  // renew on our own too, so a stale code never stays on screen
+  setInterval(() => { if (!paired) refreshQR(); }, CYCLE);
+
+  qr.addEventListener('error', () => { setPill('err', 'QR indisponível — renovando'); setTimeout(refreshQR, 1500); });
+
+  document.getElementById('sendBtn').addEventListener('click', async (e) => {
+    const out = document.getElementById('out');
+    const btn = e.currentTarget;
+    btn.disabled = true; out.textContent = 'enviando…';
+    try {
+      const body = {
+        to: document.getElementById('to').value.trim() || 'me',
+        text: document.getElementById('text').value.trim() || undefined,
+        file: document.getElementById('file').value.trim() || undefined,
+      };
+      const r = await fetch('/send', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      out.textContent = JSON.stringify(await r.json(), null, 2);
+    } catch (err) {
+      out.textContent = 'falhou: ' + err.message;
+    } finally { btn.disabled = false; }
+  });
+
+  poll();
+  setInterval(poll, 2500);
+  refreshQR();
+</script>
+</body>
+</html>

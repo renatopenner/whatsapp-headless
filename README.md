@@ -69,6 +69,8 @@ node src/cli.js send me --file ./shot.png --document
 WA_PORT=8787 WA_TOKEN=optional-secret npm run serve
 ```
 
+Open **http://127.0.0.1:8787/** for the pairing page: it shows the QR, **renews it automatically** (Baileys rotates the code every ~20 s), flips to "paired" as soon as the phone confirms, and has a send box for quick tests.
+
 ```bash
 curl -s localhost:8787/health
 curl -s localhost:8787/qr -o qr.png                     # only while unpaired
@@ -81,8 +83,9 @@ curl -s -X POST localhost:8787/send \
 
 | Method | Path | Body / notes |
 | --- | --- | --- |
+| GET | `/` , `/pair` | pairing page with self-renewing QR |
 | GET | `/health` | pairing, connection, jid |
-| GET | `/qr` | PNG of the pairing QR (`?format=text` for the raw string) |
+| GET | `/qr` , `/qr.png` | PNG of the pairing QR (`?format=text` for the raw string) |
 | POST | `/send` | `{ "to", "text", "file", "caption", "filename", "asDocument" }` |
 
 The server binds `127.0.0.1` by default (`WA_HOST`, `WA_PORT`) and reconnects on its own.
