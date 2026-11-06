@@ -23,7 +23,7 @@
   .meta { color: var(--muted); font-size: 12px; }
   .grid { display: grid; gap: 16px; grid-template-columns: 1fr; margin-top: 18px; }
   @media (min-width: 820px) { .grid { grid-template-columns: 1fr 1fr; } }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; min-width: 0; }
   .card.wide { grid-column: 1 / -1; }
   .card h2 { font-size: 14px; margin: 0 0 2px; font-weight: 650; }
   .card .hint { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
@@ -41,7 +41,7 @@
   @keyframes pulse { 0%,100% { opacity: .25; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.15); } }
   .kv { display: grid; grid-template-columns: 88px 1fr; gap: 4px 10px; font-size: 12.5px; margin-top: 14px; }
   .kv dt { color: var(--muted); }
-  .kv dd { margin: 0; font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+  .kv dd { margin: 0; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
   .qrwrap { display: none; margin-top: 14px; }
   .qrwrap.show { display: block; }
   .qrbox { background: #fff; padding: 10px; border-radius: 10px; width: 190px; }
@@ -56,7 +56,9 @@
     padding: 8px 11px; border-radius: 9px; border: 1px solid var(--line);
     background: transparent; color: var(--fg); font: inherit; font-size: 12.5px; min-width: 130px;
   }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
+  .scrollx { overflow-x: auto; margin-top: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+td, th { overflow: hidden; text-overflow: ellipsis; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
   th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
   td.mono { font-family: ui-monospace, Consolas, monospace; color: var(--muted); }
@@ -221,7 +223,7 @@
         <td class="mono">${(s.to || '').replace('@s.whatsapp.net', '')}</td>
         <td class="mono">${s.status || '—'}</td>
       </tr>`).join('');
-    el('sendsWrap').innerHTML = `<table><thead><tr><th>hora</th><th>tipo</th><th>para</th><th>recibo</th></tr></thead><tbody>${rows}</tbody></table>`;
+    el('sendsWrap').innerHTML = `<div class="scrollx"><table><thead><tr><th>hora</th><th>tipo</th><th>para</th><th>recibo</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
   async function loadSessions(force) {
@@ -269,12 +271,12 @@
     el('findingsWrap').innerHTML = Object.entries(groups).map(([kind, items]) => `
       <details>
         <summary>${kind} — ${items.length}</summary>
-        <table><thead><tr><th>chave</th><th>onde</th><th>origem</th><th>valor</th></tr></thead>
+        <div class="scrollx"><table><thead><tr><th>chave</th><th>onde</th><th>origem</th><th>valor</th></tr></thead>
         <tbody>${items.slice(0, 40).map((f) => `<tr>
           <td class="mono">${f.key || '—'}</td>
           <td class="mono">${f.where || '—'}</td>
           <td class="mono">${f.origin || '—'}</td>
-          <td class="mono">${f.preview}</td></tr>`).join('')}</tbody></table>
+          <td class="mono">${f.preview}</td></tr>`).join('')}</tbody></table></div>
         ${items.length > 40 ? `<div class="empty">+${items.length - 40} não exibidos</div>` : ''}
       </details>`).join('');
   }
