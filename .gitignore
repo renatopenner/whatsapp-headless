@@ -1,0 +1,8 @@
+node_modules/
+auth/
+*.png
+qr*.png
+pair-qr.png
+.env
+npm-debug.log*
+.DS_Store
